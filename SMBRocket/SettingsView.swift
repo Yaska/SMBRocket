@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var sharesText: String
     @State private var lanTimeout: String
     @State private var ztnaTimeout: String
+    @State private var validationError: String?
     
     init(config: NASConfig, onSave: @escaping (NASConfig) -> Void) {
         self.config = config
@@ -24,89 +25,128 @@ struct SettingsView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("SMB Connection Settings")
-                .font(.headline)
-                .padding(.bottom, 10)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            VStack(alignment: .leading, spacing: 8) {
+                Text("SMB Connection Settings")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                
+                Text("Configure your NAS server connections")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom, 20)
             
-            Form {
-                Section(header: Text("Server Configuration")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("LAN Server IP/Host")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        TextField("e.g., 192.168.1.100", text: $lanHost)
-                            .textFieldStyle(.roundedBorder)
-                            .help("Direct LAN IP address of your NAS (not in ZTNA policy)")
-                    }
+            // Server Configuration Section
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Server Configuration")
+                    .font(.headline)
+                    .fontWeight(.medium)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    LabeledTextField(
+                        label: "LAN Server IP/Host",
+                        placeholder: "192.168.1.100",
+                        text: $lanHost,
+                        help: "Direct LAN IP address of your NAS (not in ZTNA policy)"
+                    )
                     
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("ZTNA Hostname")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        TextField("e.g., smb.yourcompany.com", text: $ztnaHost)
-                            .textFieldStyle(.roundedBorder)
-                            .help("Hostname for Jamf ZTNA connection")
-                    }
+                    LabeledTextField(
+                        label: "ZTNA Hostname",
+                        placeholder: "smb.yourcompany.com",
+                        text: $ztnaHost,
+                        help: "Hostname for Jamf ZTNA connection"
+                    )
                 }
+            }
+            .padding(.bottom, 20)
+            
+            Divider()
+            .padding(.vertical, 10)
+            
+            // Shares Section
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Shares")
+                    .font(.headline)
+                    .fontWeight(.medium)
                 
-                Section(header: Text("Shares")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Share Names")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        TextField("e.g., Projects, Archive, Marketing", text: $sharesText)
-                            .textFieldStyle(.roundedBorder)
-                            .help("Comma-separated list of SMB share names")
-                    }
-                }
+                LabeledTextField(
+                    label: "Share Names",
+                    placeholder: "Projects, Archive, Marketing",
+                    text: $sharesText,
+                    help: "Comma-separated list of SMB share names to mount"
+                )
+            }
+            .padding(.bottom, 20)
+            
+            Divider()
+            .padding(.vertical, 10)
+            
+            // Advanced Section
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Advanced")
+                    .font(.headline)
+                    .fontWeight(.medium)
                 
-                Section(header: Text("Advanced")) {
-                    HStack {
-                        Text("LAN Probe Timeout (seconds)")
-                        Spacer()
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("LAN Probe Timeout")
+                            .frame(width: 150, alignment: .leading)
                         TextField("", text: $lanTimeout)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 60)
-                            .multilineTextAlignment(.trailing)
+                            .frame(width: 50)
+                        Text("seconds")
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
                     }
                     
-                    HStack {
-                        Text("ZTNA Probe Timeout (seconds)")
-                        Spacer()
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("ZTNA Probe Timeout")
+                            .frame(width: 150, alignment: .leading)
                         TextField("", text: $ztnaTimeout)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 60)
-                            .multilineTextAlignment(.trailing)
+                            .frame(width: 50)
+                        Text("seconds")
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
                     }
                 }
             }
+            .padding(.bottom, 20)
             
-            Spacer()
+            // Error message
+            if let error = validationError {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.caption)
+                    .padding(.bottom, 10)
+            }
             
-            HStack {
+            // Buttons
+            HStack(spacing: 12) {
                 Spacer()
                 Button("Cancel") {
                     NSApplication.shared.keyWindow?.close()
                 }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
                 
                 Button("Save") {
                     saveSettings()
                     NSApplication.shared.keyWindow?.close()
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
             }
         }
-        .padding()
-        .frame(minWidth: 400)
+        .padding(24)
+        .frame(minWidth: 420, idealWidth: 480, minHeight: 400, idealHeight: 500)
         .onAppear {
-            // Ensure we have valid state
-            if !isValid {
-                // If config is empty, use defaults
-                if lanHost.isEmpty && ztnaHost.isEmpty {
-                    // No-op, user needs to enter values
-                }
+            // Focus first field if empty
+            if lanHost.isEmpty {
+                // Can't set focus programmatically in SwiftUI without NSView
             }
         }
     }
@@ -116,20 +156,62 @@ struct SettingsView: View {
     }
     
     private func saveSettings() {
+        // Validate inputs
+        let timeoutValid = lanTimeout.isNumeric && ztnaTimeout.isNumeric
+        
+        if !timeoutValid {
+            validationError = "Timeout values must be numbers"
+            return
+        }
+        
         let shares = sharesText
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         
+        if shares.isEmpty && !sharesText.isEmpty {
+            validationError = "Please enter valid share names"
+            return
+        }
+        
+        validationError = nil
+        
         let newConfig = NASConfig(
             lanHost: lanHost.isEmpty ? nil : lanHost,
             ztnaHost: ztnaHost.isEmpty ? nil : ztnaHost,
             shares: shares,
-            lanProbeTimeout: TimeInterval(Int(lanTimeout) ?? 2),
-            ztnaProbeTimeout: TimeInterval(Int(ztnaTimeout) ?? 4)
+            lanProbeTimeout: TimeInterval(max(Int(lanTimeout) ?? 2, 1)),
+            ztnaProbeTimeout: TimeInterval(max(Int(ztnaTimeout) ?? 4, 1))
         )
         
         onSave(newConfig)
+    }
+}
+
+/// Labeled text field component
+struct LabeledTextField: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    let help: String?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .help(help ?? "")
+        }
+    }
+}
+
+/// Extension to check if string is numeric
+extension String {
+    var isNumeric: Bool {
+        !isEmpty && allSatisfy { $0.isNumber }
     }
 }
 
