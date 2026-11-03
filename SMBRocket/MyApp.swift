@@ -15,35 +15,42 @@ struct SMBRocketApp: App {
     }
     
     private func openSettingsWindow() {
-        // Close any existing settings windows
-        NSApplication.shared.windows
-            .filter { $0.title == "SMBRocket Settings" }
-            .forEach { $0.close() }
-        
-        // Create new window
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "SMBRocket Settings"
-        window.contentView = NSHostingView(rootView: SettingsView(
-            config: appState.config,
-            onSave: { newConfig in
-                appState.saveConfig(newConfig)
-            }
-        ))
-        
-        // Configure window behavior
-        window.center()
-        
-        // Bring to front and make key
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-        
-        // Focus the first text field (can't do this directly in SwiftUI, but we try)
-        window.makeFirstResponder(window.contentView)
+        // Use asyncAfter to ensure menu is dismissed before showing window
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // Close any existing settings windows
+            NSApplication.shared.windows
+                .filter { $0.title == "SMBRocket Settings" }
+                .forEach { $0.close() }
+            
+            // Create new window
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "SMBRocket Settings"
+            
+            // Create the SwiftUI view with a copy of current config
+            let currentConfig = appState.config
+            let settingsView = SettingsView(
+                config: currentConfig,
+                onSave: { newConfig in
+                    Task { @MainActor in
+                        appState.saveConfig(newConfig)
+                    }
+                }
+            )
+            
+            window.contentView = NSHostingView(rootView: settingsView)
+            
+            // Configure window behavior
+            window.center()
+            
+            // Bring to front and make key
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }
 
