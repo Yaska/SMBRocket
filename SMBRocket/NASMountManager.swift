@@ -167,20 +167,30 @@ class NASMountManager: ObservableObject {
             let queue = DispatchQueue(label: "eu.yaska.nasconnect.probe")
             connection.start(queue: queue)
             
+            // Track if we've already resumed to prevent multiple calls
+            var hasResumed = false
+            
             let timeoutWorkItem = DispatchWorkItem {
-                connection.cancel()
-                continuation.resume(returning: false)
+                if !hasResumed {
+                    hasResumed = true
+                    connection.cancel()
+                    continuation.resume(returning: false)
+                }
             }
             
             queue.asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
             
             connection.stateUpdateHandler = { state in
+                guard !hasResumed else { return }
+                
                 switch state {
                 case .ready:
+                    hasResumed = true
                     timeoutWorkItem.cancel()
                     connection.cancel()
                     continuation.resume(returning: true)
                 case .failed, .cancelled:
+                    hasResumed = true
                     timeoutWorkItem.cancel()
                     continuation.resume(returning: false)
                 default:
