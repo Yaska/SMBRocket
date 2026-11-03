@@ -13,31 +13,11 @@ struct AppSettings {
     static let lanProbeTimeoutKey = "lanProbeTimeoutSeconds"
     static let ztnaProbeTimeoutKey = "ztnaProbeTimeoutSeconds"
     
-    /// Load settings from Jamf managed preferences (UserDefaults with suite name)
-    /// Falls back to standard UserDefaults for manual configuration
+    /// Load settings from UserDefaults
+    /// Jamf managed preferences are automatically available in UserDefaults.standard
+    /// when a configuration profile with domain eu.yaska.nasconnect is deployed
+    /// Falls back to manually saved configuration
     static func load() -> NASConfig {
-        // First try Jamf managed preferences
-        if let jamfDefaults = UserDefaults(suiteName: preferenceDomain) {
-            let lanHost = jamfDefaults.string(forKey: lanHostKey)
-            let ztnaHost = jamfDefaults.string(forKey: ztnaHostKey)
-            let shares = jamfDefaults.array(forKey: sharesKey) as? [String] ?? []
-            
-            if lanHost != nil || ztnaHost != nil || !shares.isEmpty {
-                return NASConfig(
-                    lanHost: lanHost,
-                    ztnaHost: ztnaHost,
-                    shares: shares,
-                    lanProbeTimeout: TimeInterval(jamfDefaults.integer(forKey: lanProbeTimeoutKey) != 0 
-                        ? jamfDefaults.integer(forKey: lanProbeTimeoutKey) 
-                        : 2),
-                    ztnaProbeTimeout: TimeInterval(jamfDefaults.integer(forKey: ztnaProbeTimeoutKey) != 0 
-                        ? jamfDefaults.integer(forKey: ztnaProbeTimeoutKey) 
-                        : 4)
-                )
-            }
-        }
-        
-        // Fall back to standard UserDefaults (manual configuration)
         let defaults = UserDefaults.standard
         let lanHost = defaults.string(forKey: lanHostKey)
         let ztnaHost = defaults.string(forKey: ztnaHostKey)
