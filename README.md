@@ -21,6 +21,7 @@ SMBRocket replaces shell script-based NAS mounting solutions with a native macOS
 | **Cancel Support** | Abort ongoing connection attempts |
 | **Settings Window** | Configure server details manually |
 | **Share Status** | See which shares are mounted/not mounted |
+| **SMB Browser** | Opens Finder when no shares configured |
 
 ## Requirements
 
@@ -91,6 +92,19 @@ Deploy a Configuration Profile with the following settings:
 4. Click **Save**
 5. Click **Reconnect Now** to test the connection
 
+### SMB Browser Mode
+
+If you don't specify any share names in the configuration:
+- The app will still probe for connectivity (LAN/ZTNA)
+- Once connected, it opens the standard **macOS Finder SMB browser** (`smb://host/`)
+- You can browse and manually select shares to mount
+- The menu will show: "SMB browser opened - select shares to mount"
+
+This is useful when:
+- You don't know the share names in advance
+- Share names change frequently
+- You want to manually select which shares to mount
+
 ## Usage
 
 ### Menu Bar Icon
@@ -134,10 +148,13 @@ SMBRocket uses the following logic to determine the best connection path:
    - If not → Go offline
 
 3. **Mount Shares**
-   - Mount all configured shares from the best available path
-   - Use macOS native SMB mounting (`osascript -e "mount volume smb://..."`)
-   - If already mounted from correct host → Do nothing
-   - If mounted from wrong host → Unmount and remount from correct host
+   - If shares are configured: Mount all shares from the best available path
+     - Use macOS native SMB mounting (`osascript -e "mount volume smb://..."`)
+     - If already mounted from correct host → Do nothing
+     - If mounted from wrong host → Unmount and remount from correct host
+   - If **no shares configured**: Open standard macOS SMB browser (`smb://host/`)
+     - User can manually browse and select shares to mount
+     - Shares mounted this way are managed by Finder, not by SMBRocket
 
 4. **Offline Behavior**
    - Show "Offline" status
