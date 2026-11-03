@@ -30,8 +30,10 @@ struct ShareStatus {
 class NASMountManager: ObservableObject {
     @Published var connectionPath: ConnectionPath = .offline
     @Published var isProbing: Bool = false
+    @Published var isCancelled: Bool = false
     @Published var shareStatuses: [ShareStatus] = []
     @Published var lastError: String?
+    @Published var statusMessage: String?
     
     private let config: NASConfig
     private var probeTask: Task<Void, Never>?
@@ -39,6 +41,20 @@ class NASMountManager: ObservableObject {
     init(config: NASConfig) {
         self.config = config
         updateShareStatuses()
+        if !config.isValid {
+            statusMessage = "No server configured - open Settings to configure"
+        }
+    }
+    
+    /// Cancel any ongoing operations
+    func cancel() {
+        probeTask?.cancel()
+        probeTask = nil
+        Task { @MainActor in
+            isProbing = false
+            isCancelled = true
+            statusMessage = "Cancelled"
+        }
     }
     
     /// Probe network to determine best connection path
@@ -46,6 +62,16 @@ class NASMountManager: ObservableObject {
         await MainActor.run {
             isProbing = true
             lastError = nil
+            statusMessage = "Probing network..."
+        }
+        
+        guard config.isValid else {
+            await MainActor.run {
+                isProbing = false
+                connectionPath = .offline
+                statusMessage = "No server configured"
+            }
+            return
         }
         
         let result = await determineConnectionPath()
@@ -53,17 +79,57 @@ class NASMountManager: ObservableObject {
         await MainActor.run {
             connectionPath = result
             isProbing = false
+            if result == .offline {
+                statusMessage = "No connection available"
+            }
         }
     }
     
     /// Probe and then mount shares
     func probeAndMount() async {
-        await probe()
+        guard config.isValid else {
+            await MainActor.run {
+                isProbing = false
+                isCancelled = false
+                statusMessage = "Cannot connect: no server configured"
+            }
+            return
+        }
         
-        // Small delay to let UI update
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        // Set up a timeout for the entire operation
+        let totalTimeout = config.lanProbeTimeout + config.ztnaProbeTimeout + 10 // Extra time for mounting
         
-        await mountShares()
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                // Add timeout task
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(totalTimeout * 1_000_000_000))
+                    throw NSError(domain: "eu.yaska.nasconnect", code: -1, userInfo: [NSLocalizedDescriptionKey: "Connection timeout"])
+                }
+                
+                // Add probe and mount task
+                group.addTask { [weak self] in
+                    await self?.probe()
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if !Task.isCancelled {
+                        await self?.mountShares()
+                    }
+                }
+                
+                // Wait for either task to complete
+                try await group.next()
+                group.cancelAll()
+            }
+        } catch {
+            await MainActor.run { [weak self] in
+                if let nsError = error as NSError?, nsError.domain == "eu.yaska.nasconnect" {
+                    self?.statusMessage = "Connection timed out after \(totalTimeout) seconds"
+                } else {
+                    self?.statusMessage = "Connection failed: \(error.localizedDescription)"
+                }
+                self?.isProbing = false
+            }
+        }
     }
     
     /// Determine which connection path to use

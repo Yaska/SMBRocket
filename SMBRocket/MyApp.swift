@@ -52,5 +52,6 @@ class AppState: ObservableObject {
         AppSettings.save(config: newConfig)
         self.config = newConfig
         self.mountManager = NASMountManager(config: newConfig)
+        // Don't auto-probe after config change - let user click Reconnect
     }
 }

@@ -100,6 +100,15 @@ struct SettingsView: View {
         }
         .padding()
         .frame(minWidth: 400)
+        .onAppear {
+            // Ensure we have valid state
+            if !isValid {
+                // If config is empty, use defaults
+                if lanHost.isEmpty && ztnaHost.isEmpty {
+                    // No-op, user needs to enter values
+                }
+            }
+        }
     }
     
     private var isValid: Bool {

@@ -15,6 +15,14 @@ struct MenuBarContent: View {
                         .font(.headline)
                 }
                 .foregroundColor(connectionStatusColor)
+                
+                if let message = appState.mountManager.statusMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 24)
+                }
             }
             
             // Share statuses
@@ -30,14 +38,27 @@ struct MenuBarContent: View {
             
             // Actions
             Section {
-                Button(action: {
-                    Task {
-                        await appState.mountManager.probeAndMount()
+                HStack {
+                    Button(action: {
+                        Task {
+                            appState.mountManager.isCancelled = false
+                            await appState.mountManager.probeAndMount()
+                        }
+                    }) {
+                        Label("Reconnect Now", systemImage: "arrow.clockwise")
                     }
-                }) {
-                    Label("Reconnect Now", systemImage: "arrow.clockwise")
+                    .disabled(appState.mountManager.isProbing)
+                    
+                    if appState.mountManager.isProbing {
+                        Button(action: {
+                            appState.mountManager.cancel()
+                        }) {
+                            Label("Cancel", systemImage: "xmark")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
-                .disabled(appState.mountManager.isProbing)
                 
                 if appState.mountManager.isProbing {
                     ProgressView()
@@ -62,10 +83,19 @@ struct MenuBarContent: View {
             }
         }
         .onAppear {
-            Task {
-                await appState.mountManager.probeAndMount()
+            // Only auto-probe if we have valid configuration
+            if appState.config.isValid {
+                Task {
+                    await appState.mountManager.probeAndMount()
+                }
             }
         }
+    }
+    
+    private var isCancelled: Bool {
+        // Check if there's a cancelled task
+        // For now, just check isProbing state
+        return !appState.mountManager.isProbing
     }
     
     // MARK: - Status Display
