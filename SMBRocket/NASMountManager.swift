@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import AppKit
 
 /// Manages SMB share mounting and connection state
 enum ConnectionPath {
@@ -230,6 +231,16 @@ class NASMountManager: ObservableObject {
             return
         }
         
+        // If no shares are configured, open SMB browser for user to select
+        if config.shares.isEmpty {
+            openSMBBrowser(host: targetHost)
+            await MainActor.run {
+                statusMessage = "SMB browser opened - select shares to mount"
+                isProbing = false
+            }
+            return
+        }
+        
         await MainActor.run {
             shareStatuses = config.shares.map { share in
                 ShareStatus(name: share, status: .mounting, mountedPath: nil, error: nil)
@@ -452,5 +463,16 @@ class NASMountManager: ObservableObject {
         }
         
         shareStatuses = newStatuses
+    }
+    
+    /// Open standard macOS SMB browser for a host
+    /// This shows the Finder window with available shares
+    private func openSMBBrowser(host: String) {
+        let urlString = "smb://\(host)/"
+        if let url = URL(string: urlString) {
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 }
