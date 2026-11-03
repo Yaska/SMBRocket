@@ -4,6 +4,7 @@ import Combine
 @main
 struct SMBRocketApp: App {
     @StateObject private var appState = AppState()
+    @State private var settingsWindow: NSWindow?
     
     var body: some Scene {
         MenuBarExtra("SMBRocket") {
@@ -16,11 +17,12 @@ struct SMBRocketApp: App {
     
     private func openSettingsWindow() {
         // Use asyncAfter to ensure menu is dismissed before showing window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Close any existing settings windows
-            NSApplication.shared.windows
-                .filter { $0.title == "SMBRocket Settings" }
-                .forEach { $0.close() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+            // Close and clear existing settings window
+            if let existing = self.settingsWindow {
+                existing.close()
+                self.settingsWindow = nil
+            }
             
             // Create new window
             let window = NSWindow(
@@ -32,12 +34,12 @@ struct SMBRocketApp: App {
             window.title = "SMBRocket Settings"
             
             // Create the SwiftUI view with a copy of current config
-            let currentConfig = appState.config
+            let currentConfig = self.appState.config
             let settingsView = SettingsView(
                 config: currentConfig,
                 onSave: { newConfig in
                     Task { @MainActor in
-                        appState.saveConfig(newConfig)
+                        self.appState.saveConfig(newConfig)
                     }
                 }
             )
@@ -47,9 +49,25 @@ struct SMBRocketApp: App {
             // Configure window behavior
             window.center()
             
+            // Store strong reference
+            self.settingsWindow = window
+            
             // Bring to front and make key
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+            
+            // Handle window closure
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { _ in
+                // Clear the reference when window closes
+                // We can't use weak self on a struct, so we just check by reference
+                if self.settingsWindow === window {
+                    self.settingsWindow = nil
+                }
+            }
         }
     }
 }
